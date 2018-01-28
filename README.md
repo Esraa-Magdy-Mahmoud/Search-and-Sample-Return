@@ -5,8 +5,7 @@ This Project is based on NASA Sample Return challenge. In This Project, Wrote a 
 
 ## Dependencies
 	* Python3
-        
+	* Jupyter Notebook.
 	* Anaconda
-	
-	* Jupyter Notebook
+
 
