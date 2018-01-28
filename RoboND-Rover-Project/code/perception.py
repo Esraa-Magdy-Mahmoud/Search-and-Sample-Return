@@ -17,6 +17,27 @@ def color_thresh(img, rgb_thresh=(160, 160, 160)):
     # Return the binary image
     return color_select
 
+def obstacle_thresh(img, rgb_thresh=(160, 160, 160)):
+    obstacle_select = np.ones_like(img[:,:,0])
+    
+    above_thresh = (img[:,:,0] > rgb_thresh[0]) \
+                & (img[:,:,1] > rgb_thresh[1]) \
+                & (img[:,:,2] > rgb_thresh[2])
+    # Index the array of zeros with the boolean array and set to 1
+    obstacle_select[above_thresh] = 0
+    return obstacle_select
+def rock_thresh(img):
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+    # define range of yellow color in HSV
+    lower_yellow = np.array([50,160,80])
+    upper_yellow = np.array([110,255,250])
+
+    # Threshold the HSV image to get only yellow colors
+    rock_select = cv2.inRange(hsv, lower_yellow, upper_yellow)
+    return rock_select    
+
+
 # Define a function to convert from image coords to rover coords
 def rover_coords(binary_img):
     # Identify nonzero pixels
@@ -83,16 +104,16 @@ def perception_step(Rover):
     # Perform perception steps to update Rover()
     # TODO: 
     # NOTE: camera image is coming to you in Rover.img
-    # 1) Define source and destination points for perspective transform
-    # 2) Apply perspective transform
-    # 3) Apply color threshold to identify navigable terrain/obstacles/rock samples
-    # 4) Update Rover.vision_image (this will be displayed on left side of screen)
+    # 1) Define source and destination points for perspective transform (done)
+    # 2) Apply perspective transform (done)
+    # 3) Apply color threshold to identify navigable terrain/obstacles/rock samples (done)
+    # 4) Update Rover.vision_image (this will be displayed on left side of screen)  (done)
         # Example: Rover.vision_image[:,:,0] = obstacle color-thresholded binary image
         #          Rover.vision_image[:,:,1] = rock_sample color-thresholded binary image
         #          Rover.vision_image[:,:,2] = navigable terrain color-thresholded binary image
 
-    # 5) Convert map image pixel values to rover-centric coords
-    # 6) Convert rover-centric pixel values to world coordinates
+    # 5) Convert map image pixel values to rover-centric coords   (done)
+    # 6) Convert rover-centric pixel values to world coordinates  (done)
     # 7) Update Rover worldmap (to be displayed on right side of screen)
         # Example: Rover.worldmap[obstacle_y_world, obstacle_x_world, 0] += 1
         #          Rover.worldmap[rock_y_world, rock_x_world, 1] += 1
@@ -102,7 +123,54 @@ def perception_step(Rover):
     # Update Rover pixel distances and angles
         # Rover.nav_dists = rover_centric_pixel_distances
         # Rover.nav_angles = rover_centric_angles
+    xpos , ypos =  Rover.pos
+    #ypos =  Rover.ypos[Rover.count]
+    yaw  =  Rover.yaw 
+
+    dst_size = 5 
+    bottom_offset = 6
+    source = np.float32([[14, 140], [301 ,140],[200, 96], [118, 96]])
+    destination = np.float32([[Rover.img.shape[1]/2 - dst_size, Rover.img.shape[0] - bottom_offset],
+                  [Rover.img.shape[1]/2 + dst_size, Rover.img.shape[0] - bottom_offset],
+                  [Rover.img.shape[1]/2 + dst_size, Rover.img.shape[0] - 2*dst_size - bottom_offset], 
+                  [Rover.img.shape[1]/2 - dst_size, Rover.img.shape[0] - 2*dst_size - bottom_offset],
+                  ])
+    scale = 10
+    threshed = color_thresh(Rover.img)
+    warped = perspect_transform(threshed,source ,destination)
+
+    obs_threshed = obstacle_thresh(Rover.img)
+    obs_warped = perspect_transform(obs_threshed, source ,destination)
     
+    rock_warped =  perspect_transform(Rover.img, source ,destination)
+    rock_threshed = rock_thresh(rock_warped)
+
+    Rover.vision_image[:,:,0] = obs_warped *255
+    Rover.vision_image[:,:,1] = rock_threshed *255
+    Rover.vision_image[:,:,2] = warped *255
+
+    xpix, ypix = rover_coords(warped)
+    x_world,y_world= pix_to_world(xpix, ypix, xpos, ypos, yaw, Rover.worldmap.shape[0],scale)
+    
+    xpix_obs, ypix_obs = rover_coords(obs_warped)
+    x_world_obs,y_world_obs= pix_to_world(xpix_obs, ypix_obs, xpos, ypos, yaw, Rover.worldmap.shape[0],scale)
+    
+    xpix_rock, ypix_rock = rover_coords(rock_threshed)
+    x_world_rock,y_world_rock= pix_to_world(xpix_rock, ypix_rock, xpos, ypos, yaw, Rover.worldmap.shape[0],scale)
+    
+    Rover.worldmap[y_world_obs, x_world_obs, 0] += 255
+    Rover.worldmap[y_world_rock, x_world_rock, 1] += 255
+    Rover.worldmap[y_world, x_world, 2] += 255
+
+    terrain_pix = Rover.worldmap[: ,: ,2] >0
+    Rover.worldmap[terrain_pix, 0] = 0
+
+    dist, angles = to_polar_coords(xpix, ypix) 
+    mean_dir = np.mean(angles)
+    Rover.nav_dists = dist
+    Rover.nav_angles = angles
+
+
  
     
     
